@@ -1,0 +1,1 @@
+succ pred if true then false else 0

@@ -1,0 +1,8 @@
+__pytest__/
+.pytest_cache/
+.vscode/
+.venv/
+venv/
+*/.gitignore
+rgit.sh
+
