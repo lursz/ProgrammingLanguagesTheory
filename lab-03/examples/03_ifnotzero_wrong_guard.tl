@@ -1,0 +1,1 @@
+(\x:Nat.if succ x then false else true) 0

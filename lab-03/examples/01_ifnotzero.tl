@@ -1,0 +1,1 @@
+(\x:Nat.if iszero x then false else true) 0
