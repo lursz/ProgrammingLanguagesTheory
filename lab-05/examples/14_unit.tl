@@ -1,0 +1,1 @@
+(\x:. case x of  => false | => x)  as

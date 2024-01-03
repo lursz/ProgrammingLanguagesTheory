@@ -1,0 +1,1 @@
+(\x:Strange.succ (pred x)) true
