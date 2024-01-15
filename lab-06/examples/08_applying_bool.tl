@@ -1,0 +1,1 @@
+(\x:Bool.(\y:Nat. x y)) true

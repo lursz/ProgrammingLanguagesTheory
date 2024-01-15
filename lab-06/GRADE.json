@@ -1,0 +1,23 @@
+{
+    "got_points": 16,
+    "total_points": 16,
+    "deadline": "2024-01-17 11:30:00 CET (+0100)",
+    "passed": [
+        "[1p] Evaluator should put things in memory",
+        "[1p] Evaluator should evaluate arg before putting it in memory",
+        "[1p] Evaluator should dereference address",
+        "[1p] Evaluator should eval arg before dereferencing it",
+        "[1p] Evaluator should assign value to address",
+        "[1p] Evaluator should first evaluate address before assigning",
+        "[1p] Evaluator should evaluate new value just before assigning",
+        "[2p] Macro should expand seq correctly",
+        "[1p] Store location should always fail typecheck",
+        "[1p] Reference should be typechecked gracefully",
+        "[1p] Typechecker should detect invalid dereferences",
+        "[1p] Typechecker should detect assignments to nonref types",
+        "[1p] Typechecker should detect incompatible assignments",
+        "[1p] Typecheck should pass correct dereferences",
+        "[1p] Typecheck should pass correct assignments"
+    ],
+    "issues": []
+}

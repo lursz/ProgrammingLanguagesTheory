@@ -10,11 +10,11 @@ from typing import Optional
 
 from src.semantics.type_utils import type_is_invalid
 from src.term import Term, TmAbs, TmVar, TmApp, TmTrue, TmFalse, TmZero, TmSucc, TmIf, TmIsZero, Info, TmPred, TmLet, \
-    TmFix, TmRecord, TmProjection, TmTagging, TmCase
+    TmFix, TmUnit, TmRecord, TmProjection, TmTagging, TmCase, TmStoreLocation, TmReference, TmDereference, TmAssignment
 from src.lambda_program import TypedLambdaProgram
 from dataclasses import dataclass
 from enum import Enum, auto
-from src.type import LambdaType, BaseType, InvalidType, ArrowType, RecordType, VariantType
+from src.type import LambdaType, BaseType, InvalidType, ArrowType, RecordType, VariantType, ReferenceType
 
 
 class LambdaTypeErrorType(Enum):
@@ -40,6 +40,9 @@ class LambdaTypeErrorType(Enum):
     TagInvalidType = "type ascribed to a tagged term has inconsistent type — expected {}, got {}"
     CaseInvalidLabels = "case term should exactly cover the variant's labels, it doesn't — it covers {}, should cover {}"
     CaseDivergentBranches = "branches of case term have divergent types: {}"
+    IllegalTerm = "the term '{}' should not appear in the static context"
+    InvalidMemoryAccess = "tried to access memory address {}, it is not a ref type"
+    IncompatibleAssignment = "tried to store type '{}' in memory type '{}'"
 
 
 @dataclass
@@ -111,7 +114,6 @@ class TypeContext:
         return f"{[str(t) for t in self._context]}"
 
 
-
 class TypedLambdaTypechecker:
     '''
         A type-checker for the Typed Lambda Calculus (with Nat and Bool types).
@@ -121,9 +123,8 @@ class TypedLambdaTypechecker:
                 returns type returned by the given lambda program
                 in case of type error, raises LambdaTypeError
     '''
-
     def typecheck(self, program: TypedLambdaProgram[Term]) -> LambdaType:
-        return self._typecheck(program.term, TypeContext.empty())
+        return self._typecheck(program.state.term, TypeContext.empty())
 
     def _typecheck(self, term: Term, type_context: TypeContext) -> LambdaType:
         """
@@ -145,72 +146,37 @@ class TypedLambdaTypechecker:
             error_msg = error_type.value.format(*msg_args)
             raise LambdaTypeError(error_msg, term, type_context, error_type)
 
-        # TODO: Fill missing code for the:
-        # - TmProjection, TmRecord (refer to TPL, p. 129)
-        #   tip. relevant type errors here are:
-        #       * LambdaTypeErrorType.InvalidProjLabel
-        #       * LambdaTypeErrorType.InvalidProjArgType
-        # - TmTagging, TmCase (refer to TPL, p. 136)
-        #   tip. relevant type errors here are:
-        #       * LambdaTypeErrorType.InvalidType
-        #       * LambdaTypeErrorType.TagInvalidLabel
-        #       * LambdaTypeErrorType.TagInvalidType
-        #       * LambdaTypeErrorType.CaseInvalidLabels
-        #       * LambdaTypeErrorType.CaseDivergentBranches
-        #
-        # tip. check `type_utils.py` and fix the `type_is_invalid` function
+        # DONE: fill missing rules for:
+        # - TmStoreLocation, which shouldn't occur in the static (pre-runtime) context (LambdaTypeErrorType.IllegalTerm)
+        # - TmReference
+        # - TmDereference, possible error LambdaTypeErrorType.InvalidMemoryAccess
+        # - TmAssignment, possible error LambdaTypeErrorType.InvalidMemoryAccess, LambdaTypeErrorType.IncompatibleAssignment
+        #   tip. all rules are in TAPL, p. 167
+        #   tip 2. you can ignore memory typing, as in the static (pre-runtime) context it's always empty
         match term:
-            case TmRecord() as record:
-                record_internal_types = [(name, self._typecheck(t, type_context)) for name, t in record.records.items()]
-                record_type = RecordType.from_raw_data(Info.dummy_info(), record_internal_types)
-                return record_type
-            case TmProjection(_, record, label):
-                record_type = self._typecheck(record, type_context)
-                match record_type:
-                    case RecordType(_):
-                        projected_type = record_type.records_types.get(label)
-                        if projected_type is not None:
-                            return projected_type
-                        raise_type_error(LambdaTypeErrorType.InvalidProjLabel, label, list(record_type.records_types.keys()))
+            case TmStoreLocation():
+                raise_type_error(LambdaTypeErrorType.IllegalTerm, term)
+            case TmReference(_, t1):
+                tyT1 = self._typecheck(t1, type_context)
+                return ReferenceType(tyT1)
+            case TmDereference(_, t1):
+                tyT1 = self._typecheck(t1, type_context)
+                match tyT1:
+                    case ReferenceType(tyT11):
+                        return tyT11
                     case _:
-                        raise_type_error(LambdaTypeErrorType.InvalidProjArgType, record_type)
-            case TmTagging(_, label, t, tagging_type):
-                if type_is_invalid(tagging_type):
-                    raise_type_error(LambdaTypeErrorType.InvalidType, tagging_type)
-                tagging_internal_type = self._typecheck(t, type_context)
-                type_at_label = tagging_type.variants_types.get(label)
-                if type_at_label is None:
-                    raise_type_error(LambdaTypeErrorType.TagInvalidLabel, label, list(tagging_type.variants_types.keys()))
-                if type_at_label != tagging_internal_type:
-                    raise_type_error(LambdaTypeErrorType.TagInvalidType, tagging_internal_type, type_at_label)
-                return tagging_type
-            case TmCase(_, t, vars_branches, branches):
-                t_type = self._typecheck(t, type_context)
-                match t_type:
-                    case VariantType(variants_types):
-                        expected_labels = set(variants_types.keys())
-                        branch_labels = set(branches.keys())
-
-                        if len(expected_labels.symmetric_difference(branch_labels)) > 0:
-                            raise_type_error(LambdaTypeErrorType.CaseInvalidLabels, list(branches.keys()), list(variants_types.keys()))
-
-                        branches_types = set()
-                        branches_types_str = set()
-                        last_branch_type = None
-
-                        for branch_label, branch_term in branches.items():
-                            variable_type = variants_types.get(branch_label)
-                            new_context = type_context.extend_with_type(variable_type)
-                            branch_type = self._typecheck(branch_term, new_context)
-                            branches_types_str.add(str(branch_type))
-                            branches_types.add(branch_type)
-                            last_branch_type = branch_type
-
-                        if len(branches_types_str) != 1:
-                            raise_type_error(LambdaTypeErrorType.CaseDivergentBranches, list(sorted(branches_types, key=str)))
-                        return last_branch_type
+                        raise_type_error(LambdaTypeErrorType.InvalidMemoryAccess, tyT1)
+            case TmAssignment(_, t1, t2):
+                tyT1 = self._typecheck(t1, type_context)
+                tyT2 = self._typecheck(t2, type_context)
+                match tyT1:
+                    case ReferenceType(tyT11):
+                        if tyT11 == tyT2:
+                            return BaseType.Unit
+                        else:
+                            raise_type_error(LambdaTypeErrorType.IncompatibleAssignment, tyT2, tyT1)
                     case _:
-                        raise_type_error(LambdaTypeErrorType.InvalidVariant, t)
+                        raise_type_error(LambdaTypeErrorType.InvalidMemoryAccess, tyT1)
             case TmFalse() | TmTrue():
                 return BaseType.Bool
             case TmIf(_, t1, t2, t3):
@@ -226,6 +192,8 @@ class TypedLambdaTypechecker:
                     raise_type_error(LambdaTypeErrorType.IfInvalidGuard, tyT1)
             case TmZero():
                 return BaseType.Nat
+            case TmUnit():
+                return BaseType.Unit
             case TmSucc(_, t1) | TmPred(_, t1) | TmIsZero(_, t1):
                 tyT1 = self._typecheck(t1, type_context)
                 if tyT1 == BaseType.Nat:
@@ -274,3 +242,11 @@ class TypedLambdaTypechecker:
                             raise_type_error(LambdaTypeErrorType.InvalidRecFunType, tyT11, tyT12)
                     case _:
                         raise_type_error(LambdaTypeErrorType.InvalidFunType, tyT1)
+            case TmRecord():
+                raise NotImplementedError("Hidden to prolong the lab-5 deadline")
+            case TmProjection():
+                raise NotImplementedError("Hidden to prolong the lab-5 deadline")
+            case TmTagging():
+                raise NotImplementedError("Hidden to prolong the lab-5 deadline")
+            case TmCase():
+                raise NotImplementedError("Hidden to prolong the lab-5 deadline")
