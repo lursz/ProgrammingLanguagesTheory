@@ -1,0 +1,1 @@
+(\x:Bool.succ (pred x)) true

@@ -1,0 +1,1 @@
+(\x:{ 0 : Nat, label : Bool}. { 0 = x.0, new_label = x.label }) { 0 = 0, succ 0, label = if true then false else true}

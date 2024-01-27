@@ -1,0 +1,1 @@
+(\r:Ref Nat. (r := (succ !r)); (r := (succ !r)); (r := (succ !r)); (r := (succ !r)); !r) (ref (succ 0))
