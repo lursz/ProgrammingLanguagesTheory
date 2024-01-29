@@ -10,3 +10,5 @@ This repository contains full Introduction to Programming Language Theory course
 5. [Abstract Data Type](lab-05/)
 6. [Memory](lab-06/)
 7. [Subtyping](lab-07/)
+
+Course is based on this [textbook]([Textbook]TypesAndProgrammingLanguages.pdf).
